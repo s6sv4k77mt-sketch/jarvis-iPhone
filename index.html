@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>J.A.R.V.I.S. - Neural HUD</title>
+    <style>
+        :root {
+            --primary-color: #00e5ff;
+            --bg-color: #02050b;
+            --glow-color: rgba(0, 229, 255, 0.5);
+        }
+        body {
+            background-color: var(--bg-color);
+            color: var(--primary-color);
+            font-family: 'Courier New', monospace;
+            margin: 0;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+            overflow: hidden;
+            transition: background-color 0.4s, color 0.4s;
+        }
+        /* Schermata di sblocco obbligatorio per Safari/iOS */
+        #unlock-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--bg-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            text-align: center;
+            padding: 20px;
+        }
+        .unlock-btn {
+            background: transparent;
+            color: var(--primary-color);
+            border: 2px solid var(--primary-color);
+            padding: 15px 25px;
+            font-size: 1rem;
+            font-family: monospace;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 0 20px var(--glow-color);
+            margin-top: 20px;
+        }
+        h1 {
+            font-size: 1.2rem;
+            letter-spacing: 3px;
+            text-shadow: 0 0 10px var(--primary-color);
+            margin: 5px 0;
+        }
+        .status {
+            font-size: 0.65rem;
+            opacity: 0.8;
+            margin-bottom: 10px;
+        }
+        /* Sfera / Nucleo olografico centrale stile neural net */
+        .neural-container {
+            position: relative;
+            width: 200px;
+            height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 15px 0;
+        }
+        .neural-core {
+            width: 120px;
+            height: 120px;
+            border: 2px solid var(--primary-color);
+            border-radius: 50%;
+            box-shadow: 0 0 30px var(--primary-color), inset 0 0 20px var(--primary-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle, rgba(0,229,255,0.3) 0%, #000 85%);
+            animation: pulseNet 2.5s infinite alternate ease-in-out;
+            transition: transform 0.3s ease;
+        }
+        .core-inner {
+            width: 40px;
+            height: 40px;
+            background-color: var(--primary-color);
+            border-radius: 50%;
+            box-shadow: 0 0 25px var(--primary-color);
+        }
+        .neural-core.speaking {
+            transform: scale(1.35);
+            box-shadow: 0 0 50px var(--primary-color), inset 0 0 35px var(--primary-color);
+        }
+        @keyframes pulseNet {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            100% { transform: scale(1.05); opacity: 1; }
+        }
+        .terminal {
+            width: 100%;
+            max-width: 380px;
+            background: rgba(0, 10, 25, 0.9);
+            border: 1px solid var(--primary-color);
+            border-radius: 6px;
+            padding: 10px;
+            box-shadow: 0 0 15px var(--glow-color);
+            font-size: 0.75rem;
+            min-height: 50px;
+            max-height: 80px;
+            overflow-y: auto;
+            text-align: center;
+            box-sizing: border-box;
+        }
+        .mic-status {
+            margin-top: 10px;
+            font-size: 0.7rem;
+            letter-spacing: 1px;
+            color: #00ff66;
+            text-shadow: 0 0 8px rgba(0,255,102,0.6);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Schermata di sblocco audio obbligatorio per iOS -->
+    <div id="unlock-screen">
+        <h1>J.A.R.V.I.S. - NEURAL NET</h1>
+        <p style="font-size: 0.75rem; max-width: 300px; opacity: 0.8;">Toccare per stabilire il collegamento neurale e sbloccare i flussi audio su iOS, Signore.</p>
+        <button class="unlock-btn" onclick="inizializzaSistema()">ATTIVA SISTEMA</button>
+    </div>
+
+    <h1>J.A.R.V.I.S.</h1>
+    <div class="status" id="battery-status">STATUS: ANALISI ENERGIA...</div>
+
+    <!-- Nucleo centrale olografico -->
+    <div class="neural-container">
+        <div class="neural-core" id="neuralCore">
+            <div class="core-inner"></div>
+        </div>
+    </div>
+
+    <div class="terminal" id="output">
+        In attesa di comandi vocali, Signore...
+    </div>
+
+    <div class="mic-status" id="micStatusText">🎙️ ASCOLTO CONTINUO ATTIVO</div>
+
+    <!-- Elementi Audio Nativi HTML (Infallibili su iOS) -->
+    <audio id="audioAvvio" src="avvio.mp3" preload="auto"></audio>
+    <audio id="audioYoutube" src="youtube.mp3" preload="auto"></audio>
+    <audio id="audioFollower" src="follower.mp3" preload="auto"></audio>
+
+    <script>
+        // Sincronizzazione Batteria e Colori Dinamici
+        if ('getBattery' in navigator) {
+            navigator.getBattery().then(function(battery) {
+                updateBatteryUI(battery);
+                battery.addEventListener('levelchange', function() { updateBatteryUI(battery); });
+            });
+        }
+
+        function updateBatteryUI(battery) {
+            const level = Math.floor(battery.level * 100);
+            const statusEl = document.getElementById('battery-status');
+            const root = document.documentElement;
+
+            if (level < 20) {
+                root.style.setProperty('--primary-color', '#ff3333');
+                root.style.setProperty('--bg-color', '#1a0000');
+                statusEl.innerHTML = `⚠️ EMERGENZA: BATTERIA CRITICA AL ${level}%`;
+            } else if (level < 40) {
+                root.style.setProperty('--primary-color', '#ff9900');
+                root.style.setProperty('--bg-color', '#1a0f00');
+                statusEl.innerHTML = `⚠️ ATTENZIONE: BATTERIA AL ${level}%`;
+            } else {
+                root.style.setProperty('--primary-color', '#00e5ff');
+                root.style.setProperty('--bg-color', '#02050b');
+                statusEl.innerHTML = `ENERGIA STABILE: ${level}% (ONLINE)`;
+            }
+        }
+
+        // Funzione per riprodurre i file audio HTML nativi sbloccati
+        function riproduciFileAudio(audioElementId, testoOutput, callback) {
+            const core = document.getElementById('neuralCore');
+            const output = document.getElementById('output');
+
+            if (testoOutput) {
+                output.innerText = testoOutput;
+            }
+
+            const audio = document.getElementById(audioElementId);
+            if (audio) {
+                audio.currentTime = 0;
+                core.classList.add('speaking');
+                
+                audio.play().then(() => {
+                    console.log("Audio in riproduzione:", audioElementId);
+                }).catch(err => {
+                    console.log("Errore riproduzione iOS:", err);
+                    core.classList.remove('speaking');
+                });
+
+                audio.onended = function() {
+                    core.classList.remove('speaking');
+                    if (callback) callback();
+                };
+            }
+        }
+
+        // Sblocco iniziale richiesto da iOS
+        function inizializzaSistema() {
+            const unlockScreen = document.getElementById('unlock-screen');
+            unlockScreen.style.display = 'none';
+
+            // Sblocca i tag audio simulando un play vuoto
+            document.getElementById('audioAvvio').play().catch(()=>{});
+            document.getElementById('audioYoutube').play().catch(()=>{});
+            document.getElementById('audioFollower').play().catch(()=>{});
+
+            // Avvia la sequenza vocale di avvio
+            riproduciFileAudio('audioAvvio', 'Inizializzazione sistemi completata. Rete neurale online. Buonasera, Signore.');
+
+            // Avvia il microfono continuo automatico
+            avviaRiconoscimentoVocaleContinuo();
+        }
+
+        // Riconoscimento Vocale Continuo Esclusivo (Senza pulsanti)
+        let recognition = null;
+
+        function avviaRiconoscimentoVocaleContinuo() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                alert("Il tuo browser non supporta il riconoscimento vocale, Signore.");
+                return;
+            }
+
+            recognition = new SpeechRecognition();
+            recognition.lang = 'it-IT';
+            recognition.interimResults = false;
+            recognition.continuous = true;
+
+            recognition.onresult = function(event) {
+                const comando = event.results[event.results.length - 1][0].transcript.trim().toLowerCase();
+                document.getElementById('output').innerText = `Comando rilevato: "${comando}"`;
+                elaboraComandoVocale(comando);
+            };
+
+            recognition.onerror = function(event) {
+                console.log("Errore microfono:", event.error);
+            };
+
+            // Riavvio automatico se il microfono si chiude da solo
+            recognition.onend = function() {
+                try {
+                    recognition.start();
+                } catch (e) {
+                    console.log("Riavvio riconoscimento in corso...");
+                }
+            };
+
+            try {
+                recognition.start();
+            } catch (e) {
+                console.log("Riconoscimento già attivo.");
+            }
+        }
+
+        // Logica dei comandi vocali
+        function elaboraComandoVocale(comando) {
+            if (comando.includes('youtube')) {
+                riproduciFileAudio('audioYoutube', 'Signore, apertura YouTube in corso.', function() {
+                    window.location.href = 'https://www.youtube.com';
+                });
+            } else if (comando.includes('saluta') || comando.includes('follower')) {
+                riproduciFileAudio('audioFollower', 'Ciao a tutti, benvenuti! Grazie per averci seguito, siamo felici di avervi con noi.');
+            } else {
+                riproduciFileAudio('audioAvvio', `Comando non riconosciuto: "${comando}". Signore, eseguo.`);
+            }
+        }
+    </script>
+</body>
+</html>

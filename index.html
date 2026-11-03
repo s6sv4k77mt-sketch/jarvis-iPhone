@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>J.A.R.V.I.S. - Core</title>
+    <style>
+        :root {
+            --primary-color: #00e5ff;
+            --bg-color: #030813;
+            --glow-color: rgba(0, 229, 255, 0.6);
+        }
+        body {
+            background-color: var(--bg-color);
+            color: var(--primary-color);
+            font-family: 'Courier New', monospace;
+            margin: 0;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            min-height: 100vh;
+            box-sizing: border-box;
+            transition: background-color 0.4s, color 0.4s;
+        }
+        h1 {
+            font-size: 1.3rem;
+            text-align: center;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px var(--primary-color);
+            margin-bottom: 2px;
+        }
+        .status {
+            font-size: 0.7rem;
+            opacity: 0.8;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        .audio-unlock {
+            background: var(--primary-color);
+            color: #000;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-weight: bold;
+            cursor: pointer;
+            margin-bottom: 15px;
+            box-shadow: 0 0 15px var(--primary-color);
+            font-size: 0.85rem;
+        }
+        .reactor-container {
+            position: relative;
+            width: 170px;
+            height: 170px;
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+        .reactor {
+            width: 110px;
+            height: 110px;
+            border: 3px solid var(--primary-color);
+            border-radius: 50%;
+            box-shadow: 0 0 25px var(--primary-color), inset 0 0 20px var(--primary-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            transition: transform 0.25s ease;
+            animation: pulseGlow 2s infinite alternate ease-in-out;
+        }
+        .core {
+            width: 35px;
+            height: 35px;
+            background-color: var(--primary-color);
+            border-radius: 50%;
+            box-shadow: 0 0 25px var(--primary-color);
+        }
+        .reactor.speaking {
+            transform: scale(1.25);
+            box-shadow: 0 0 45px var(--primary-color), inset 0 0 35px var(--primary-color);
+        }
+        @keyframes pulseGlow {
+            0% { transform: scale(0.95); opacity: 0.85; }
+            100% { transform: scale(1.05); opacity: 1; }
+        }
+        .terminal {
+            width: 100%;
+            max-width: 400px;
+            background: rgba(0, 10, 25, 0.85);
+            border: 1px solid var(--primary-color);
+            border-radius: 6px;
+            padding: 10px;
+            box-shadow: 0 0 15px var(--glow-color);
+            margin-bottom: 12px;
+            box-sizing: border-box;
+        }
+        #output {
+            font-size: 0.8rem;
+            min-height: 40px;
+            max-height: 90px;
+            overflow-y: auto;
+            margin-bottom: 8px;
+            line-height: 1.3;
+        }
+        .input-box {
+            display: flex;
+            gap: 6px;
+        }
+        input[type="text"] {
+            flex: 1;
+            background: #000;
+            border: 1px solid var(--primary-color);
+            color: var(--primary-color);
+            padding: 6px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.85rem;
+        }
+        .action-row {
+            display: flex;
+            gap: 6px;
+        }
+        button.action-btn {
+            flex: 1;
+            background: transparent;
+            border: 1px solid var(--primary-color);
+            color: var(--primary-color);
+            padding: 6px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: monospace;
+            font-weight: bold;
+            font-size: 0.8rem;
+            text-align: center;
+        }
+        button.action-btn:active {
+            background: var(--primary-color);
+            color: #000;
+        }
+        .section-title {
+            font-size: 0.75rem;
+            letter-spacing: 1px;
+            margin-top: 8px;
+            margin-bottom: 4px;
+            border-bottom: 1px dashed var(--primary-color);
+            width: 100%;
+            max-width: 400px;
+            padding-bottom: 2px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>J.A.R.V.I.S.</h1>
+    <div class="status" id="battery-status">STATUS: ANALISI ENERGIA...</div>
+
+    <!-- Pulsante di sblocco obbligatorio per iOS -->
+    <button class="audio-unlock" onclick="sbloccaEParla()">🔊 TOCCA QUI PER ATTIVARE VOCE</button>
+
+    <div class="reactor-container" onclick="eseguiInterazione()">
+        <div class="reactor" id="holoReactor">
+            <div class="core"></div>
+        </div>
+    </div>
+
+    <div class="terminal">
+        <div id="output">Signore, sistemi pronti. Tocca il tasto sopra per abilitare l'audio.</div>
+        <div class="input-box">
+            <input type="text" id="userInput" placeholder="Scrivi un comando..." onkeypress="handleKey(event)">
+            <button class="action-btn" style="flex:0 0 auto;" onclick="eseguiComandoTesto()">INVIA</button>
+        </div>
+    </div>
+
+    <div class="action-row" style="width: 100%; max-width: 400px; margin-bottom: 12px;">
+        <button class="action-btn" onclick="impostaComando('saluta i nuovi follower')">Saluta follower</button>
+        <button class="action-btn" onclick="impostaComando('cerca su youtube')">YouTube</button>
+    </div>
+
+    <div class="section-title">METEO BOLOGNA</div>
+    <div class="terminal" id="weather-box" style="font-size: 0.75rem; min-height: auto;">
+        Caricamento dati...
+    </div>
+
+    <script>
+        // Gestione Batteria Dispositivo
+        if ('getBattery' in navigator) {
+            navigator.getBattery().then(function(battery) {
+                updateBatteryUI(battery);
+                battery.addEventListener('levelchange', function() { updateBatteryUI(battery); });
+            });
+        }
+
+        function updateBatteryUI(battery) {
+            const level = Math.floor(battery.level * 100);
+            const statusEl = document.getElementById('battery-status');
+            const root = document.documentElement;
+
+            if (level < 20) {
+                root.style.setProperty('--primary-color', '#ff3333');
+                root.style.setProperty('--bg-color', '#1a0000');
+                statusEl.innerHTML = `⚠️ EMERGENZA: BATTERIA CRITICA AL ${level}%`;
+            } else if (level < 40) {
+                root.style.setProperty('--primary-color', '#ff9900');
+                root.style.setProperty('--bg-color', '#1a0f00');
+                statusEl.innerHTML = `⚠️ ATTENZIONE: BATTERIA AL ${level}%`;
+            } else {
+                root.style.setProperty('--primary-color', '#00e5ff');
+                root.style.setProperty('--bg-color', '#030813');
+                statusEl.innerHTML = `ENERGIA STABILE: ${level}% (ONLINE)`;
+            }
+        }
+
+        // Sintesi vocale forzata
+        function parla(testo, callback) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(testo);
+                utterance.lang = 'it-IT';
+                utterance.rate = 1.05;
+
+                const reactor = document.getElementById('holoReactor');
+
+                utterance.onstart = function() {
+                    reactor.classList.add('speaking');
+                };
+
+                utterance.onend = function() {
+                    reactor.classList.remove('speaking');
+                    if (callback) callback();
+                };
+
+                window.speechSynthesis.speak(utterance);
+            } else if (callback) {
+                callback();
+            }
+        }
+
+        function sbloccaEParla() {
+            // Forza l'istanza audio su iOS
+            const utterance = new SpeechSynthesisUtterance("Audio sbloccato. Buonasera, Signore.");
+            utterance.lang = 'it-IT';
+            window.speechSynthesis.speak(utterance);
+            
+            document.getElementById('output').innerText = "INIZIALIZZAZIONE SISTEMI COMPLETATA.\nRETE NEURALE ONLINE.\nCOLLEGAMENTO AL CERVELLO STABILITO.\nSINTESI VOCALE PRONTA.\n\nBuonasera, Signore.";
+        }
+
+        function eseguiInterazione() {
+            const frasi = [
+                "Signore, toccare il mio reattore non velocizzerà i suoi impegni.",
+                "Sempre ai suoi ordini Signore.",
+                "Sistemi operativi perfettamente stabili, Signore."
+            ];
+            const scelta = frasi[Math.floor(Math.random() * frasi.length)];
+            document.getElementById('output').innerText = scelta;
+            parla(scelta);
+        }
+
+        function impostaComando(testo) {
+            document.getElementById('userInput').value = testo;
+            eseguiComandoTesto();
+        }
+
+        function handleKey(e) {
+            if (e.key === 'Enter') {
+                eseguiComandoTesto();
+            }
+        }
+
+        function eseguiComandoTesto() {
+            const input = document.getElementById('userInput');
+            const testo = input.value.trim().toLowerCase();
+            const output = document.getElementById('output');
+
+            if (!testo) return;
+
+            if (testo.includes('youtube') || testo.includes('cerca su youtube')) {
+                let query = testo.replace('cerca su youtube', '').replace('youtube', '').trim();
+                if (query.length > 0) {
+                    output.innerText = `Signore, apertura YouTube per: "${query}"`;
+                    parla(`Subito Signore, cerco ${query} su YouTube.`, function() {
+                        window.location.href = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+                    });
+                } else {
+                    output.innerText = "Signore, apro YouTube.";
+                    parla("Apro YouTube, Signore.", function() {
+                        window.location.href = `https://www.youtube.com`;
+                    });
+                }
+                return;
+            }
+
+            let risposta = "Signore, ho elaborato la richiesta.";
+            if (testo.includes('follower') || testo.includes('saluta')) {
+                risposta = "Ciao a tutti, benvenuti! Grazie per averci seguito, siamo felici di avervi con noi.";
+            } else if (testo.includes('chi sei')) {
+                risposta = "Sono J.A.R.V.I.S., il suo assistente personale, Signore.";
+            } else if (testo.includes('ciao') || testo.includes('salve')) {
+                risposta = "Buonasera, Signore.";
+            }
+
+            output.innerText = risposta;
+            parla(risposta);
+            input.value = '';
+        }
+
+        // Meteo Bologna
+        fetch('https://api.open-meteo.com/v1/forecast?latitude=44.4949&longitude=11.3426&current_weather=true')
+            .then(res => res.json())
+            .then(data => {
+                const temp = data.current_weather.temperature;
+                const vento = data.current_weather.windspeed;
+                document.getElementById('weather-box').innerHTML = `Bologna: ${temp}°C | Vento: ${vento} km/h. Online, Signore.`;
+            })
+            .catch(() => {
+                document.getElementById('weather-box').innerHTML = `Bologna: Connessione attiva, Signore.`;
+            });
+    </script>
+</body>
+</html>

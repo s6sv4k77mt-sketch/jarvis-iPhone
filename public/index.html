@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>J.A.R.V.I.S.</title>
+<style>
+  :root { --c:#00e5ff; --c2:#0a84ff; --bg:#02060d; }
+  * { box-sizing: border-box; }
+  html,body { margin:0; height:100%; background: radial-gradient(circle at 50% 45%, #06182a 0%, var(--bg) 70%); color:var(--c); font-family: "Courier New", monospace; overflow:hidden; }
+  #hud-top { position:fixed; top:0; left:0; right:0; display:flex; justify-content:space-between; padding:16px 20px; letter-spacing:2px; font-size:13px; text-shadow:0 0 8px var(--c); }
+  #hud-top div { text-align:center; }
+  #clock { font-size:26px; }
+  #stage { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  canvas { width:min(88vw,62vh); height:min(88vw,62vh); }
+  #status { position:fixed; bottom:150px; width:100%; text-align:center; font-size:14px; letter-spacing:3px; text-shadow:0 0 8px var(--c); }
+  #transcript { position:fixed; bottom:96px; width:100%; text-align:center; padding:0 20px; font-size:13px; color:#9fefff; min-height:18px; }
+  #bar { position:fixed; bottom:20px; left:0; right:0; display:flex; gap:8px; padding:0 16px; max-width:640px; margin:auto; }
+  #bar input { flex:1; background:rgba(0,229,255,.06); border:1px solid var(--c); color:var(--c); padding:12px; border-radius:24px; font-family:inherit; outline:none; }
+  #bar button { background:transparent; border:1px solid var(--c); color:var(--c); padding:0 18px; border-radius:24px; font-family:inherit; cursor:pointer; }
+  #bday { position:fixed; inset:0; background:rgba(2,6,13,.92); display:none; align-items:center; justify-content:center; flex-direction:column; gap:14px; z-index:10; text-align:center; padding:20px; }
+  #bday input, #bday button { background:transparent; border:1px solid var(--c); color:var(--c); padding:10px 16px; border-radius:20px; font-family:inherit; font-size:16px; }
+  #bday button { cursor:pointer; }
+</style>
+</head>
+<body>
+<div id="hud-top">
+  <div><div id="clock">--:--:--</div><div id="date"></div></div>
+  <div><div>BOLOGNA</div><div id="weather">meteo in caricamento…</div></div>
+</div>
+
+<div id="stage"><canvas id="sphere" width="900" height="900"></canvas></div>
+<div id="status">TOCCA LA SFERA PER ATTIVARE JARVIS</div>
+<div id="transcript"></div>
+<div id="bar">
+  <input id="txt" placeholder="Oppure scriva qui, signore…" autocomplete="off">
+  <button id="send">INVIA</button>
+</div>
+
+<div id="bday">
+  <div>Signore, mi dica la Sua data di nascita,<br>così non dimenticherò mai il Suo compleanno.</div>
+  <input type="date" id="bdayInput">
+  <button id="bdaySave">CONFERMA</button>
+</div>
+
+<script>
+/* ---------- Stato ---------- */
+let state = "idle";
+let active = false;
+let history = [];
+let weatherText = "";
+const WMO = {0:"sereno",1:"prevalentemente sereno",2:"parzialmente nuvoloso",3:"coperto",45:"nebbia",48:"nebbia con brina",51:"pioviggine leggera",53:"pioviggine",55:"pioviggine intensa",61:"pioggia leggera",63:"pioggia",65:"pioggia forte",71:"neve leggera",73:"neve",75:"neve forte",80:"rovesci leggeri",81:"rovesci",82:"rovesci violenti",95:"temporale",96:"temporale con grandine",99:"temporale forte con grandine"};
+
+const $ = id => document.getElementById(id);
+function setState(s, label){ state = s; if(label) $("status").textContent = label; }
+
+/* ---------- Orologio ---------- */
+function now(){ return new Date(); }
+function tick(){
+  const d = now();
+  $("clock").textContent = d.toLocaleTimeString("it-IT",{timeZone:"Europe/Rome"});
+  $("date").textContent = d.toLocaleDateString("it-IT",{timeZone:"Europe/Rome",weekday:"long",day:"numeric",month:"long",year:"numeric"}).toUpperCase();
+}
+setInterval(tick,1000); tick();
+
+/* ---------- Meteo Bologna (Open-Meteo, senza chiave) ---------- */
+async function loadWeather(){
+  try{
+    const r = await fetch("https://api.open-meteo.com/v1/forecast?latitude=44.4949&longitude=11.3426&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m&timezone=Europe%2FRome");
+    const j = await r.json(); const c = j.current;
+    weatherText = `${Math.round(c.temperature_2m)}°C (percepiti ${Math.round(c.apparent_temperature)}°C), ${WMO[c.weather_code]||"variabile"}, vento ${Math.round(c.wind_speed_10m)} km/h`;
+    $("weather").textContent = weatherText.toUpperCase();
+  }catch(e){ $("weather").textContent = "METEO NON DISPONIBILE"; }
+}
+loadWeather(); setInterval(loadWeather, 10*60*1000);
+
+/* ---------- Compleanno ---------- */
+function getBday(){ return localStorage.getItem("jarvis_bday"); }
+function bdayInfo(){
+  const b = getBday(); if(!b) return {birthday:"", note:""};
+  const [y,m,d] = b.split("-").map(Number);
+  const t = now(); let next = new Date(t.getFullYear(), m-1, d);
+  const today = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+  if(next < today) next = new Date(t.getFullYear()+1, m-1, d);
+  const days = Math.round((next - today)/86400000);
+  const label = `${d}/${m}/${y}`;
+  if(days===0) return {birthday:label, note:`OGGI è il suo compleanno! Compie ${t.getFullYear()-y} anni.`, today:true};
+  return {birthday:label, note:`Mancano ${days} giorni al prossimo compleanno.`, days};
+}
+if(!getBday()) $("bday").style.display="flex";
+$("bdaySave").onclick = () => { const v=$("bdayInput").value; if(v){ localStorage.setItem("jarvis_bday",v); $("bday").style.display="none"; } };
+
+/* ---------- Voce (sintesi) ---------- */
+let voices = [];
+function loadVoices(){ voices = speechSynthesis.getVoices(); }
+loadVoices(); speechSynthesis.onvoiceschanged = loadVoices;
+function pickVoice(){
+  const it = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith("it"));
+  return it.find(v => /luca|cosimo|diego|giorgio|male|uomo/i.test(v.name))
+      || it.find(v => /google/i.test(v.name))
+      || it[0] || null;
+}
+function speak(text){
+  return new Promise(res => {
+    stopListening();
+    speechSynthesis.cancel();
+    const clean = text.replace(/[*_#`>]/g,"").replace(/https?:\/\/\S+/g,"");
+    const u = new SpeechSynthesisUtterance(clean);
+    u.lang = "it-IT"; u.rate = 1.0; u.pitch = 0.8;
+    const v = pickVoice(); if(v) u.voice = v;
+    u.onstart = () => setState("speaking","JARVIS STA PARLANDO");
+    u.onend = u.onerror = () => { setState("idle","IN ASCOLTO"); res(); };
+    $("transcript").textContent = text;
+    speechSynthesis.speak(u);
+  });
+}
+
+/* ---------- Riconoscimento vocale ---------- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null, wantListen = false;
+function startListening(){
+  if(!SR || !active) return;
+  wantListen = true;
+  if(rec) return;
+  rec = new SR(); rec.lang = "it-IT"; rec.continuous = false; rec.interimResults = false;
+  rec.onstart = () => setState("listening","IN ASCOLTO…");
+  rec.onresult = e => { const t = e.results[0][0].transcript.trim(); if(t) ask(t); };
+  rec.onend = () => { rec = null; if(wantListen && active && state!=="thinking" && state!=="speaking") setTimeout(startListening,300); };
+  rec.onerror = () => { rec = null; };
+  try{ rec.start(); }catch(e){ rec=null; }
+}
+function stopListening(){ wantListen = false; if(rec){ try{rec.abort();}catch(e){} rec=null; } }
+
+/* ---------- Conversazione ---------- */
+function context(){
+  const b = bdayInfo();
+  return {
+    time: now().toLocaleString("it-IT",{timeZone:"Europe/Rome",dateStyle:"full",timeStyle:"medium"}),
+    weather: weatherText, birthday: b.birthday, birthdayNote: b.note
+  };
+}
+async function ask(text){
+  stopListening();
+  $("transcript").textContent = "« " + text + " »";
+  setState("thinking","ELABORAZIONE…");
+  history.push({role:"user",content:text});
+  let reply;
+  try{
+    const r = await fetch("/api/chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({messages:history,context:context()})});
+    reply = (await r.json()).reply;
+  }catch(e){ reply = "Signore, temo di aver perso la connessione con il server."; }
+  history.push({role:"assistant",content:reply});
+  await speak(reply);
+  startListening();
+}
+
+async function activate(){
+  if(active) return;
+  active = true;
+  const b = bdayInfo();
+  const h = now().toLocaleTimeString("it-IT",{timeZone:"Europe/Rome",hour:"2-digit",minute:"2-digit"});
+  let g = `Buongiorno, signore. Sono le ${h} a Bologna. ${weatherText ? "Il meteo: "+weatherText+"." : ""} `;
+  const hr = Number(now().toLocaleString("it-IT",{timeZone:"Europe/Rome",hour:"numeric",hour12:false}));
+  if(hr>=18) g = g.replace("Buongiorno","Buonasera"); else if(hr>=13) g = g.replace("Buongiorno","Buon pomeriggio");
+  if(b.today) g += "E, se mi permette, tantissimi auguri di buon compleanno, signore! Non me lo sarei mai perso. ";
+  g += "Tutti i sistemi sono operativi. A Sua completa disposizione.";
+  history.push({role:"assistant",content:g});
+  await speak(g);
+  startListening();
+}
+
+$("stage").onclick = activate;
+$("send").onclick = () => { const v=$("txt").value.trim(); if(v){ $("txt").value=""; active=true; ask(v);} };
+$("txt").onkeydown = e => { if(e.key==="Enter") $("send").onclick(); };
+if(!SR) $("status").textContent = "VOCE NON SUPPORTATA: USI CHROME/EDGE, OPPURE SCRIVA";
+
+/* ---------- Sfera futuristica ---------- */
+const cv = $("sphere"), g = cv.getContext("2d");
+const W = cv.width, CX = W/2, CY = W/2, R = W*0.30;
+const N = 520, pts = [];
+for(let i=0;i<N;i++){
+  const y = 1 - (i/(N-1))*2, r = Math.sqrt(1-y*y), th = Math.PI*(3-Math.sqrt(5))*i;
+  pts.push([Math.cos(th)*r, y, Math.sin(th)*r]);
+}
+let ang = 0, pulse = 0;
+function frame(t){
+  g.clearRect(0,0,W,W);
+  const speed = {idle:0.004, listening:0.009, thinking:0.03, speaking:0.012}[state];
+  ang += speed;
+  const amp = state==="speaking" ? 1 + 0.06*Math.sin(t/90) + 0.03*Math.sin(t/37)
+            : state==="listening" ? 1 + 0.025*Math.sin(t/220)
+            : 1 + 0.012*Math.sin(t/600);
+  pulse = t/1000;
+  const col = state==="thinking" ? "255,190,60" : "0,229,255";
+
+  const grad = g.createRadialGradient(CX,CY,R*0.2,CX,CY,R*1.9);
+  grad.addColorStop(0,`rgba(${col},0.18)`); grad.addColorStop(1,"rgba(0,0,0,0)");
+  g.fillStyle = grad; g.fillRect(0,0,W,W);
+
+  for(let k=0;k<3;k++){
+    g.save(); g.translate(CX,CY);
+    g.rotate(ang*(k%2?-1.4:1.1) + k*1.1);
+    g.scale(1, 0.32 + 0.12*k);
+    g.beginPath(); g.arc(0,0,R*(1.25+0.16*k)*amp,0,Math.PI*2);
+    g.strokeStyle = `rgba(${col},${0.35-0.07*k})`; g.lineWidth = 2; g.setLineDash([14,10+6*k]); g.stroke();
+    g.restore();
+  }
+  g.setLineDash([]);
+  g.beginPath(); g.arc(CX,CY,R*1.95,0,Math.PI*2); g.strokeStyle=`rgba(${col},.18)`; g.lineWidth=1.5; g.stroke();
+  g.beginPath(); g.arc(CX,CY,R*1.95,ang*2,ang*2+1.2); g.strokeStyle=`rgba(${col},.8)`; g.lineWidth=4; g.stroke();
+
+  const cy = Math.cos(0.35), sy = Math.sin(0.35), ca = Math.cos(ang), sa = Math.sin(ang);
+  const proj = pts.map(p=>{
+    let x = p[0]*ca + p[2]*sa, z = -p[0]*sa + p[2]*ca, y = p[1];
+    const y2 = y*cy - z*sy, z2 = y*sy + z*cy;
+    return [CX + x*R*amp, CY + y2*R*amp, z2];
+  });
+  g.lineWidth = 0.6;
+  for(let i=0;i<N;i+=2){
+    for(let j=i+1;j<Math.min(N,i+14);j++){
+      const dx = proj[i][0]-proj[j][0], dy = proj[i][1]-proj[j][1], d = dx*dx+dy*dy;
+      if(d < 1700){
+        const a = (0.10 + 0.22*((proj[i][2]+1)/2)) * (1-d/1700);
+        g.strokeStyle = `rgba(${col},${a})`;
+        g.beginPath(); g.moveTo(proj[i][0],proj[i][1]); g.lineTo(proj[j][0],proj[j][1]); g.stroke();
+      }
+    }
+  }
+  for(const p of proj){
+    const depth = (p[2]+1)/2;
+    g.fillStyle = `rgba(${col},${0.25+0.75*depth})`;
+    g.beginPath(); g.arc(p[0],p[1],1.2+2.2*depth,0,Math.PI*2); g.fill();
+  }
+  const core = g.createRadialGradient(CX,CY,0,CX,CY,R*0.45*amp);
+  core.addColorStop(0,`rgba(${col},.55)`); core.addColorStop(1,"rgba(0,0,0,0)");
+  g.fillStyle = core; g.beginPath(); g.arc(CX,CY,R*0.45*amp,0,Math.PI*2); g.fill();
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
